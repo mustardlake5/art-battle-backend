@@ -1,14 +1,16 @@
 export type User = {
   socketId: string;
   userName: string;
+  purchaseDone?: boolean;
 };
 
 export type Room = {
   id: string;
   roomName: string;
   matching: boolean;
-  user1: User;
-  user2?: User;
+  prepareForBattleDone: boolean;
+  user1: Required<User>;
+  user2?: Required<User>;
 };
 
 export type MessageFromServer = {
@@ -30,7 +32,8 @@ export type CreateRoomMessageFromClient = {
 export type CreateRoomMessageToClient = {
   type: 'createRoom';
   matching: boolean;
-  roomId?: string;
+  roomIndex: number;
+  roomId: string;
   roomName: string;
   isRoomOwner: boolean;
   user1: {
@@ -41,4 +44,21 @@ export type CreateRoomMessageToClient = {
     userName: string;
     socketId: string;
   };
+};
+
+export type PurchaseDoneMessageFromClient = {
+  type: 'purchaseDone';
+  roomIndex: number;
+  roomId: string;
+  roomName: string;
+  user: Required<User>;
+};
+
+export type PurchaseDoneMessageToClient = {
+  type: 'purchaseDone';
+  roomId: string;
+  roomName: string;
+  prepareForBattleDone: boolean;
+  user1: Required<User>;
+  user2: Required<User>;
 };

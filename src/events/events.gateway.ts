@@ -10,6 +10,8 @@ import { Server, Socket } from 'socket.io';
 import {
   CreateRoomMessageFromClient,
   CreateRoomMessageToClient,
+  PurchaseDoneMessageFromClient,
+  PurchaseDoneMessageToClient,
   Room,
 } from 'src/types';
 import { v4 as uuidv4 } from 'uuid';
@@ -63,6 +65,7 @@ export class EventsGateway {
       this.rooms[i]['user2'] = {
         socketId: client.id,
         userName: message.userName,
+        purchaseDone: false,
       };
 
       // ルームが2人埋まったのでmatching: trueとする
@@ -76,9 +79,11 @@ export class EventsGateway {
         id: uuidv4(),
         roomName: message.roomName,
         matching: false,
+        prepareForBattleDone: false,
         user1: {
           socketId: client.id,
           userName: message.userName,
+          purchaseDone: false,
         },
       };
       this.rooms.push(newRoom);
@@ -90,6 +95,7 @@ export class EventsGateway {
     const messageToClient: CreateRoomMessageToClient = {
       type: 'createRoom',
       matching,
+      roomIndex,
       roomId,
       roomName,
       isRoomOwner,
@@ -101,6 +107,48 @@ export class EventsGateway {
       this.server.emit(`matchingSuccessToClient:${roomName}`, messageToClient);
     } else {
       this.server.emit(`createRoomToClient:${roomName}`, messageToClient);
+    }
+  }
+
+  @SubscribeMessage('purchaseDone')
+  handleReceivedPurchaseDoneMessage(
+    @MessageBody() message: PurchaseDoneMessageFromClient,
+    @ConnectedSocket() client: Socket,
+  ): void {
+    this.logger.log('received: purchaseDoneMessage');
+    this.logger.log(message);
+
+    const { roomIndex, roomId: roomIdFromClientMessage, user } = message;
+
+    const room = this.rooms[roomIndex];
+    if (user.socketId === room.user1.socketId) {
+      room.user1.purchaseDone = true;
+    } else {
+      room.user2.purchaseDone = true;
+    }
+
+    if (room.user1.purchaseDone && room.user2.purchaseDone) {
+      room.prepareForBattleDone = true;
+    }
+
+    const { id: roomId, roomName, prepareForBattleDone, user1, user2 } = room;
+
+    const messageToClient: PurchaseDoneMessageToClient = {
+      type: 'purchaseDone',
+      roomId,
+      roomName,
+      prepareForBattleDone,
+      user1,
+      user2,
+    };
+
+    if (prepareForBattleDone) {
+      this.server.emit(
+        `prepareForBattleDoneToClient:${roomId}`,
+        messageToClient,
+      );
+    } else {
+      this.server.emit(`purchaseDoneToClient:${roomId}`, messageToClient);
     }
   }
 
