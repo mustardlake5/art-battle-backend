@@ -8,11 +8,15 @@ import {
 } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
 import {
+  BattleResultMessageFromClient,
+  BothPlayerSelectDoneMessage,
   CreateRoomMessageFromClient,
   CreateRoomMessageToClient,
+  EitherPlayerSelectDoneMessage,
   PurchaseDoneMessageFromClient,
   PurchaseDoneMessageToClient,
   Room,
+  SelectItemDoneMessageFromClient,
 } from 'src/types';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -66,6 +70,8 @@ export class EventsGateway {
         socketId: client.id,
         userName: message.userName,
         purchaseDone: false,
+        artSelectDone: false,
+        selectedItem: null,
       };
 
       // ルームが2人埋まったのでmatching: trueとする
@@ -80,10 +86,13 @@ export class EventsGateway {
         roomName: message.roomName,
         matching: false,
         prepareForBattleDone: false,
+        battleItemSelectDone: false,
         user1: {
           socketId: client.id,
           userName: message.userName,
           purchaseDone: false,
+          artSelectDone: false,
+          selectedItem: null,
         },
       };
       this.rooms.push(newRoom);
@@ -149,6 +158,82 @@ export class EventsGateway {
       );
     } else {
       this.server.emit(`purchaseDoneToClient:${roomId}`, messageToClient);
+    }
+  }
+
+  @SubscribeMessage('selectItemDone')
+  handleReceivedBattleItemSelectDoneMessage(
+    @MessageBody() message: SelectItemDoneMessageFromClient,
+    @ConnectedSocket() client: Socket,
+  ): void {
+    this.logger.log('received: battleItemSelectDoneMessage');
+    this.logger.log(message);
+
+    const { roomIndex, roomId: roomIdFromClientMessage, user } = message;
+
+    const room = this.rooms[roomIndex];
+    if (user.socketId === room.user1.socketId) {
+      room.user1.artSelectDone = true;
+      room.user1.selectedItem = user.selectedItem;
+    } else {
+      room.user2.artSelectDone = true;
+      room.user2.selectedItem = user.selectedItem;
+    }
+
+    if (room.user1.artSelectDone && room.user2.artSelectDone) {
+      room.battleItemSelectDone = true;
+    }
+
+    const {
+      id: roomId,
+      roomName,
+      battleItemSelectDone,
+      user1: roomUser1,
+      user2: roomUser2,
+    } = room;
+
+    if (battleItemSelectDone) {
+      const messageToClient: BothPlayerSelectDoneMessage = {
+        roomId,
+        roomName,
+        battleItemSelectDone,
+        user1: roomUser1,
+        user2: roomUser2,
+      };
+      this.server.emit(`bothPlayerSelectDone:${roomId}`, messageToClient);
+    } else {
+      const { selectedItem: _1, ...user1 } = roomUser1;
+      const { selectedItem: _2, ...user2 } = roomUser2;
+      const messageToClient: EitherPlayerSelectDoneMessage = {
+        roomId,
+        roomName,
+        battleItemSelectDone,
+        user1,
+        user2,
+      };
+      this.server.emit(`eitherPlayerSelectDone:${roomId}`, messageToClient);
+    }
+  }
+
+  @SubscribeMessage('battleResult')
+  handleBattleResultMessage(
+    @MessageBody() message: BattleResultMessageFromClient,
+    @ConnectedSocket() client: Socket,
+  ) {
+    const { roomIndex } = message;
+    const room = this.rooms[roomIndex];
+    const { user1, user2 } = room;
+
+    this.logger.log('受信: battleResult');
+    this.logger.log(`user1.artSelectDone: ${user1.artSelectDone}`);
+    this.logger.log(`user2.artSelectDone: ${user2.artSelectDone}`);
+
+    if (user1.artSelectDone && user2.artSelectDone) {
+      room.battleItemSelectDone = false;
+      user1.artSelectDone = false;
+      user1.selectedItem = 'null';
+      user2.artSelectDone = false;
+      user2.selectedItem = 'null';
     }
   }
 
