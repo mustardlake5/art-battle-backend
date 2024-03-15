@@ -1,4 +1,5 @@
 import { Logger } from '@nestjs/common';
+import { Cron } from '@nestjs/schedule';
 import {
   ConnectedSocket,
   MessageBody,
@@ -247,5 +248,13 @@ export class EventsGateway {
 
   handleDisconnect(@ConnectedSocket() client: Socket) {
     this.logger.log(`Client disconnected: ${client.id}`);
+  }
+
+  @Cron('0 0 0 * * *', {
+    timeZone: 'Asia/Tokyo',
+  })
+  handleResetRooms() {
+    this.rooms = [];
+    this.logger.log('success reset rooms!');
   }
 }
